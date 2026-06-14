@@ -30,7 +30,8 @@
         }
 
         header h1 { margin: 0; font-size: 2rem; }
-        header p { margin: 5px 0 0 0; opacity: 0.8; font-size: 0.9rem; }
+        header h2 { margin: 5px 0 0 0; font-size: 1.2rem; font-weight: 400; opacity: 0.9; }
+        header p { margin: 10px 0 0 0; opacity: 0.8; font-size: 0.9rem; }
 
         .container {
             max-width: 1200px;
@@ -60,54 +61,125 @@
             box-shadow: 0 4px 8px rgba(0,0,0,0.05);
             transition: all 0.3s ease;
             border: 2px solid transparent;
-            cursor: pointer;
-            position: relative;
+            display: flex;
+            flex-direction: column;
         }
 
-        .design-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+        /* Change to contain so images never get cropped */
+        .image-container {
+            width: 100%;
+            height: 250px;
+            background-color: #eaeaea; 
+            cursor: zoom-in;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
         }
 
-        /* Selected State */
+        .design-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain; /* Keeps full picture ratio visible and clear */
+            display: block;
+        }
+
+        /* Selected State Styling */
         .design-card.selected {
             border-color: var(--accent);
             background-color: #f0fff4;
         }
 
-        .design-card img {
-            width: 100%;
-            height: 220px;
-            object-fit: cover;
-            display: block;
+        /* Bottom Selection Bar on Card */
+        .card-meta {
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #fff;
+            border-top: 1px solid #edf2f7;
+            cursor: pointer;
+            user-select: none;
         }
 
-        .card-meta {
-            padding: 15px;
-            text-align: center;
+        .design-card.selected .card-meta {
+            background: #f0fff4;
         }
 
         .design-number {
             font-weight: bold;
-            font-size: 1.1rem;
+            font-size: 1rem;
             color: var(--primary);
-            margin-bottom: 8px;
         }
 
-        .select-badge {
-            display: inline-block;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            background: #e2e8f0;
-            color: #4a5568;
-            font-weight: 600;
+        /* Custom Checkbox Design */
+        .select-checkbox {
+            width: 22px;
+            height: 22px;
+            border: 2px solid #cbd5e0;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             transition: all 0.2s;
+            background: white;
         }
 
-        .design-card.selected .select-badge {
+        .design-card.selected .select-checkbox {
             background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .select-checkbox::after {
+            content: "✓";
             color: white;
+            font-size: 0.9rem;
+            font-weight: bold;
+            display: none;
+        }
+
+        .design-card.selected .select-checkbox::after {
+            display: block;
+        }
+
+        /* Full Screen Image Popup (Modal) */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            padding-top: 20px;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.9);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            margin: auto;
+            display: block;
+            max-width: 90%;
+            max-height: 85vh;
+            object-fit: contain;
+            border-radius: 4px;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 25px;
+            color: #fff;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .close-modal:hover {
+            color: #bbb;
         }
 
         /* Sticky Bottom Order Bar */
@@ -161,7 +233,6 @@
             background-color: #1ebe57;
         }
 
-        /* Responsive adjustments */
         @media (max-width: 600px) {
             .order-bar {
                 flex-direction: column;
@@ -180,8 +251,8 @@
 
     <header>
         <h1>JAIN EXPORTS</h1>
-        <h2> Collection 2026 </h2>
-        <p>Select your designs below and submit order via WhatsApp</p>
+        <h2>Collection 2026</h2>
+        <p>Tap a picture to view full image. Click bottom tile checkbox to select for WhatsApp order.</p>
     </header>
 
     <div class="container">
@@ -189,7 +260,11 @@
         <div class="portfolio-grid" id="portfolioGrid"></div>
     </div>
 
-    <!-- Hidden until items are selected -->
+    <div id="imageModal" class="modal" onclick="closeImage()">
+        <span class="close-modal" onclick="closeImage()">&times;</span>
+        <img class="modal-content" id="modalImg">
+    </div>
+
     <div class="order-bar" id="orderBar">
         <div class="order-info">
             Selected: <span id="selectedCount">0</span> designs
@@ -202,10 +277,7 @@
 
     <script>
         // CONFIGURATION
-        // 1. Paste your deployed Google Apps Script Web App URL here:
         const API_URL = "https://script.google.com/macros/s/AKfycby6_3dmpXSezhynwK9rMj71Nq1CWZnOlA8Ple-5SiRd9t_IzlNyeXVALM-fVTt8SjthXg/exec"; 
-        
-        // 2. Paste your WhatsApp Business/Personal number here (Include Country Code, NO spaces, NO +)
         const WHATSAPP_NUMBER = "918740081511"; 
 
         let selectedDesigns = new Set();
@@ -217,7 +289,7 @@
                 
                 if (data.error) {
                     console.error("API Error:", data.error);
-                    document.getElementById('loading').innerText = "Failed to load catalog. Please check configuration.";
+                    document.getElementById('loading').innerText = "Failed to load catalog.";
                     return;
                 }
 
@@ -234,38 +306,51 @@
             grid.innerHTML = "";
 
             if(designs.length === 0) {
-                grid.innerHTML = "<p class='loading'>No active designs in the catalog right now.</p>";
+                grid.innerHTML = "<p class='loading'>No active designs right now.</p>";
                 return;
             }
 
             designs.forEach(design => {
                 const card = document.createElement('div');
                 card.className = 'design-card';
-                card.dataset.id = design.name; // Keep tracking reference
+                card.id = `card-${design.name.replace(/\s+/g, '-')}`;
                 
                 card.innerHTML = `
-                    <img src="${design.url}" alt="${design.name}" loading="lazy">
-                    <div class="card-meta">
+                    <div class="image-container" onclick="openImage('${design.url}')">
+                        <img src="${design.url}" alt="${design.name}" loading="lazy">
+                    </div>
+                    <div class="card-meta" onclick="toggleSelection('${design.name}', '${card.id}')">
                         <div class="design-number">${design.name}</div>
-                        <span class="select-badge">Select Design</span>
+                        <div class="select-checkbox"></div>
                     </div>
                 `;
 
-                // Toggle Selection Event
-                card.addEventListener('click', () => toggleSelection(card, design.name));
                 grid.appendChild(card);
             });
         }
 
-        function toggleSelection(cardElement, designName) {
+        // Separate function to view images full screen
+        function openImage(imgUrl) {
+            const modal = document.getElementById("imageModal");
+            const modalImg = document.getElementById("modalImg");
+            modal.style.display = "flex";
+            modalImg.src = imgUrl;
+        }
+
+        function closeImage() {
+            document.getElementById("imageModal").style.display = "none";
+        }
+
+        // Toggle selection only when clicking the design info bar
+        function toggleSelection(designName, cardId) {
+            const cardElement = document.getElementById(cardId);
+            
             if (selectedDesigns.has(designName)) {
                 selectedDesigns.delete(designName);
                 cardElement.classList.remove('selected');
-                cardElement.querySelector('.select-badge').innerText = "Select Design";
             } else {
                 selectedDesigns.add(designName);
                 cardElement.classList.add('selected');
-                cardElement.querySelector('.select-badge').innerText = "✓ Selected";
             }
             
             updateOrderBar();
@@ -282,28 +367,22 @@
             if (count > 0) {
                 bar.classList.add('visible');
                 
-                // Construct the text message beautifully formatted for WhatsApp
-                let message = `Hello, I would like to place a wholesale order for the following designs:\n\n`;
+                let message = `Hello JAIN EXPORTS, I would like to place a wholesale order for the following designs:\n\n`;
                 
-                // Add selected items sorted cleanly
                 const orderedItems = Array.from(selectedDesigns).sort();
                 orderedItems.forEach((item, index) => {
                     message += `${index + 1}. Design: *${item}*\n`;
                 });
                 
-                message += `\nPlease let me know the pricing and stock availability. Thanks!`;
+                message += `\nPlease let me know the estimated delivery and stock availability. Thanks!`;
                 
-                // Encode for safe URL string passing
                 wsLink.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
             } else {
                 bar.classList.remove('visible');
             }
         }
 
-        // Initial Load
         fetchPortfolio();
-
-        // POLL FOR UPDATES: Runs once every 24 hours (86,400,000 milliseconds)
         setInterval(fetchPortfolio, 86400000);
     </script>
 </body>
