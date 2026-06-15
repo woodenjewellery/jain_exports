@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wholesale Design Portfolio</title>
+    <title>Latest designs by Jain Exports, Jaipur.</title>
     <style>
         :root {
             --primary: #2c3e50;
@@ -182,7 +182,6 @@
             -webkit-overflow-scrolling: touch;
         }
 
-        /* Hide Scrollbar for Slider Container */
         .slider-wrapper::-webkit-scrollbar {
             display: none;
         }
@@ -228,7 +227,7 @@
             cursor: pointer;
             border-radius: 5px;
             z-index: 2100;
-            display: none; /* Hidden on tiny screens, access via mobile swipe */
+            display: none;
         }
 
         @media (min-width: 768px) {
@@ -327,7 +326,6 @@
         <div class="portfolio-grid" id="portfolioGrid"></div>
     </div>
 
-    <!-- Fullscreen Slider Viewer Modal -->
     <div id="imageModal" class="modal">
         <span class="close-modal" onclick="closeImage()">&times;</span>
         <button class="nav-btn prev-btn" onclick="moveSlide(-1)">&#10094;</button>
@@ -337,7 +335,6 @@
         <div class="slide-counter" id="slideCounter">1 / 1</div>
     </div>
 
-    <!-- Sticky Bottom Bar -->
     <div class="order-bar" id="orderBar">
         <div class="order-info">
             Selected: <span id="selectedCount">0</span> designs
@@ -353,8 +350,8 @@
         const API_URL = "https://script.google.com/macros/s/AKfycby6_3dmpXSezhynwK9rMj71Nq1CWZnOlA8Ple-5SiRd9t_IzlNyeXVALM-fVTt8SjthXg/exec"; 
         const WHATSAPP_NUMBER = "918740081511"; 
 
-        let designCatalog = {}; // Holds aggregated designs: { "292": ["base64..", "base64.."] }
-        let selectedDesigns = new Map(); // Tracks chosen design name -> array of all its image URLs
+        let designCatalog = {}; 
+        let selectedDesigns = new Map(); 
 
         async function fetchPortfolio() {
             try {
@@ -376,24 +373,26 @@
         }
 
         function groupAndRenderPortfolio(rawFiles) {
-            designCatalog = {}; // Reset
+            designCatalog = {}; 
 
             rawFiles.forEach(file => {
-                // If filename is "292a" or "292b", group Name matches numbers: "292"
-                // It checks for trailing letters/indicators. Falls back to original name if no match.
                 let baseMatch = file.name.match(/^([0-9\-_\\\s]+|[A-Za-z0-9\-_\\\s]+?)(?=[a-zA-Z]$|\s*[a-zA-Z]$|$)/);
                 let designGroupKey = baseMatch ? baseMatch[0].trim() : file.name.trim();
 
                 if (!designCatalog[designGroupKey]) {
                     designCatalog[designGroupKey] = [];
                 }
-                designCatalog[designGroupKey].push(file.url);
+                // Save both the tiny thumbnail and high-res picture formats
+                designCatalog[designGroupKey].push({
+                    thumb: file.thumb,
+                    full: file.full
+                });
             });
 
             const grid = document.getElementById('portfolioGrid');
             grid.innerHTML = "";
 
-            const sortedKeys = Object.keys(designCatalog).sort((a, b) => b.localeCompare(a.localeCompare, undefined, {numeric: true}));
+            const sortedKeys = Object.keys(designCatalog).sort((a, b) => b.localeCompare(a, undefined, {numeric: true}));
 
             if(sortedKeys.length === 0) {
                 grid.innerHTML = "<p class='loading'>No active designs right now.</p>";
@@ -401,21 +400,20 @@
             }
 
             sortedKeys.forEach(designName => {
-                const imagesArray = designCatalog[designName];
-                const coverImage = imagesArray[0]; // First picture acts as card cover
-                const totalPhotos = imagesArray.length;
+                const itemsArray = designCatalog[designName];
+                const coverThumb = itemsArray[0].thumb; 
+                const totalPhotos = itemsArray.length;
 
                 const card = document.createElement('div');
                 card.className = 'design-card';
                 card.id = `card-${designName.replace(/\s+/g, '-')}`;
                 
-                // Add badge display notice if there are 2 or more files under this tile
                 let badgeHTML = totalPhotos > 1 ? `<div class="photo-count-badge">${totalPhotos} Photos</div>` : '';
 
                 card.innerHTML = `
                     ${badgeHTML}
                     <div class="image-container" onclick="openImageSlider('${designName}')">
-                        <img src="${coverImage}" alt="${designName}" loading="lazy">
+                        <img src="${coverThumb}" alt="${designName}" loading="lazy">
                     </div>
                     <div class="card-meta" onclick="toggleSelection('${designName}', '${card.id}')">
                         <div class="design-number">${designName}</div>
@@ -437,19 +435,19 @@
             const modal = document.getElementById("imageModal");
             const wrapper = document.getElementById("sliderWrapper");
             
-            wrapper.innerHTML = ""; // Clear old slides
+            wrapper.innerHTML = ""; 
             
-            activeImagesList.forEach(imgUrl => {
+            activeImagesList.forEach(item => {
                 const slideDiv = document.createElement('div');
                 slideDiv.className = 'slide';
-                slideDiv.innerHTML = `<img src="${imgUrl}">`;
+                // Loads the clear, large version inside the zoom viewer
+                slideDiv.innerHTML = `<img src="${item.full}" loading="lazy">`;
                 wrapper.appendChild(slideDiv);
             });
 
             modal.style.display = "flex";
             updateCounterDisplay(0);
 
-            // Add scroll tracking setup to support natural finger swiping on mobile devices
             wrapper.onscroll = () => {
                 let index = Math.round(wrapper.scrollLeft / wrapper.clientWidth);
                 updateCounterDisplay(index);
@@ -505,11 +503,10 @@
                 let message = `Hello JAIN EXPORTS, I would like to place a wholesale order for the following designs:\n\n`;
                 
                 let index = 1;
-                selectedDesigns.forEach((urlsArray, designName) => {
+                selectedDesigns.forEach((itemsArray, designName) => {
                     message += `${index}. Design Group: *${designName}*\n`;
-                    // Lists links for ALL sub-photos belonging to this item choice
-                    urlsArray.forEach((url, pIdx) => {
-                        message += `   • Photo ${pIdx + 1}: ${url}\n`;
+                    itemsArray.forEach((item, pIdx) => {
+                        message += `   • Photo ${pIdx + 1}: ${item.full}\n`;
                     });
                     message += `\n`;
                     index++;
