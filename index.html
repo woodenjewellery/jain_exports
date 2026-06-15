@@ -63,9 +63,24 @@
             border: 2px solid transparent;
             display: flex;
             flex-direction: column;
+            position: relative;
         }
 
-        /* Change to contain so images never get cropped */
+        /* Multiple Image Badge Counter */
+        .photo-count-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            z-index: 5;
+            pointer-events: none;
+        }
+
         .image-container {
             width: 100%;
             height: 250px;
@@ -80,7 +95,7 @@
         .design-card img {
             width: 100%;
             height: 100%;
-            object-fit: contain; /* Keeps full picture ratio visible and clear */
+            object-fit: contain;
             display: block;
         }
 
@@ -90,7 +105,6 @@
             background-color: #f0fff4;
         }
 
-        /* Bottom Selection Bar on Card */
         .card-meta {
             padding: 12px;
             display: flex;
@@ -142,31 +156,55 @@
             display: block;
         }
 
-        /* Full Screen Image Popup (Modal) */
+        /* Full Screen Image Viewer Modal */
         .modal {
             display: none;
             position: fixed;
             z-index: 2000;
-            padding-top: 20px;
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
-            overflow: auto;
-            background-color: rgba(0,0,0,0.9);
+            background-color: rgba(0,0,0,0.95);
             align-items: center;
             justify-content: center;
+            user-select: none;
         }
 
-        .modal-content {
-            margin: auto;
-            display: block;
-            max-width: 90%;
-            max-height: 85vh;
+        /* Horizontal Swipe Container */
+        .slider-wrapper {
+            width: 100%;
+            height: 80vh;
+            display: flex;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            scroll-behavior: smooth;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        /* Hide Scrollbar for Slider Container */
+        .slider-wrapper::-webkit-scrollbar {
+            display: none;
+        }
+
+        .slide {
+            flex: 0 0 100%;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            scroll-snap-align: start;
+        }
+
+        .slide img {
+            max-width: 95%;
+            max-height: 100%;
             object-fit: contain;
-            border-radius: 4px;
+            pointer-events: none;
         }
 
+        /* Slider Controls */
         .close-modal {
             position: absolute;
             top: 15px;
@@ -175,11 +213,40 @@
             font-size: 40px;
             font-weight: bold;
             cursor: pointer;
-            transition: 0.2s;
+            z-index: 2100;
         }
 
-        .close-modal:hover {
-            color: #bbb;
+        .nav-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255,255,255,0.1);
+            color: white;
+            border: none;
+            font-size: 2rem;
+            padding: 15px 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            z-index: 2100;
+            display: none; /* Hidden on tiny screens, access via mobile swipe */
+        }
+
+        @media (min-width: 768px) {
+            .nav-btn { display: block; }
+        }
+
+        .prev-btn { left: 20px; }
+        .next-btn { right: 20px; }
+
+        .slide-counter {
+            position: absolute;
+            bottom: 20px;
+            color: rgba(255,255,255,0.7);
+            font-size: 1rem;
+            z-index: 2100;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 15px;
+            border-radius: 20px;
         }
 
         /* Sticky Bottom Order Bar */
@@ -252,7 +319,7 @@
     <header>
         <h1>JAIN EXPORTS</h1>
         <h2>Collection 2026</h2>
-        <p>Tap a picture to view full image. Click bottom tile checkbox to select for WhatsApp order.</p>
+        <p>Tap a design tile to view all variant photos (Swipe to look through). Tick checkbox to choose for WhatsApp order.</p>
     </header>
 
     <div class="container">
@@ -260,11 +327,17 @@
         <div class="portfolio-grid" id="portfolioGrid"></div>
     </div>
 
-    <div id="imageModal" class="modal" onclick="closeImage()">
+    <!-- Fullscreen Slider Viewer Modal -->
+    <div id="imageModal" class="modal">
         <span class="close-modal" onclick="closeImage()">&times;</span>
-        <img class="modal-content" id="modalImg">
+        <button class="nav-btn prev-btn" onclick="moveSlide(-1)">&#10094;</button>
+        <button class="nav-btn next-btn" onclick="moveSlide(1)">&#10095;</button>
+        
+        <div class="slider-wrapper" id="sliderWrapper"></div>
+        <div class="slide-counter" id="slideCounter">1 / 1</div>
     </div>
 
+    <!-- Sticky Bottom Bar -->
     <div class="order-bar" id="orderBar">
         <div class="order-info">
             Selected: <span id="selectedCount">0</span> designs
@@ -280,7 +353,8 @@
         const API_URL = "https://script.google.com/macros/s/AKfycby6_3dmpXSezhynwK9rMj71Nq1CWZnOlA8Ple-5SiRd9t_IzlNyeXVALM-fVTt8SjthXg/exec"; 
         const WHATSAPP_NUMBER = "918740081511"; 
 
-        let selectedDesigns = new Set();
+        let designCatalog = {}; // Holds aggregated designs: { "292": ["base64..", "base64.."] }
+        let selectedDesigns = new Map(); // Tracks chosen design name -> array of all its image URLs
 
         async function fetchPortfolio() {
             try {
@@ -293,7 +367,7 @@
                     return;
                 }
 
-                renderPortfolio(data);
+                groupAndRenderPortfolio(data);
                 document.getElementById('loading').style.display = 'none';
             } catch (error) {
                 console.error("Fetch Error:", error);
@@ -301,26 +375,50 @@
             }
         }
 
-        function renderPortfolio(designs) {
+        function groupAndRenderPortfolio(rawFiles) {
+            designCatalog = {}; // Reset
+
+            rawFiles.forEach(file => {
+                // If filename is "292a" or "292b", group Name matches numbers: "292"
+                // It checks for trailing letters/indicators. Falls back to original name if no match.
+                let baseMatch = file.name.match(/^([0-9\-_\\\s]+|[A-Za-z0-9\-_\\\s]+?)(?=[a-zA-Z]$|\s*[a-zA-Z]$|$)/);
+                let designGroupKey = baseMatch ? baseMatch[0].trim() : file.name.trim();
+
+                if (!designCatalog[designGroupKey]) {
+                    designCatalog[designGroupKey] = [];
+                }
+                designCatalog[designGroupKey].push(file.url);
+            });
+
             const grid = document.getElementById('portfolioGrid');
             grid.innerHTML = "";
 
-            if(designs.length === 0) {
+            const sortedKeys = Object.keys(designCatalog).sort((a, b) => b.localeCompare(a.localeCompare, undefined, {numeric: true}));
+
+            if(sortedKeys.length === 0) {
                 grid.innerHTML = "<p class='loading'>No active designs right now.</p>";
                 return;
             }
 
-            designs.forEach(design => {
+            sortedKeys.forEach(designName => {
+                const imagesArray = designCatalog[designName];
+                const coverImage = imagesArray[0]; // First picture acts as card cover
+                const totalPhotos = imagesArray.length;
+
                 const card = document.createElement('div');
                 card.className = 'design-card';
-                card.id = `card-${design.name.replace(/\s+/g, '-')}`;
+                card.id = `card-${designName.replace(/\s+/g, '-')}`;
                 
+                // Add badge display notice if there are 2 or more files under this tile
+                let badgeHTML = totalPhotos > 1 ? `<div class="photo-count-badge">${totalPhotos} Photos</div>` : '';
+
                 card.innerHTML = `
-                    <div class="image-container" onclick="openImage('${design.url}')">
-                        <img src="${design.url}" alt="${design.name}" loading="lazy">
+                    ${badgeHTML}
+                    <div class="image-container" onclick="openImageSlider('${designName}')">
+                        <img src="${coverImage}" alt="${designName}" loading="lazy">
                     </div>
-                    <div class="card-meta" onclick="toggleSelection('${design.name}', '${card.id}')">
-                        <div class="design-number">${design.name}</div>
+                    <div class="card-meta" onclick="toggleSelection('${designName}', '${card.id}')">
+                        <div class="design-number">${designName}</div>
                         <div class="select-checkbox"></div>
                     </div>
                 `;
@@ -329,27 +427,64 @@
             });
         }
 
-        // Separate function to view images full screen
-        function openImage(imgUrl) {
+        // SLIDER CONTROL LOGIC
+        let activeImagesList = [];
+        
+        function openImageSlider(designName) {
+            activeImagesList = designCatalog[designName] || [];
+            if(activeImagesList.length === 0) return;
+
             const modal = document.getElementById("imageModal");
-            const modalImg = document.getElementById("modalImg");
+            const wrapper = document.getElementById("sliderWrapper");
+            
+            wrapper.innerHTML = ""; // Clear old slides
+            
+            activeImagesList.forEach(imgUrl => {
+                const slideDiv = document.createElement('div');
+                slideDiv.className = 'slide';
+                slideDiv.innerHTML = `<img src="${imgUrl}">`;
+                wrapper.appendChild(slideDiv);
+            });
+
             modal.style.display = "flex";
-            modalImg.src = imgUrl;
+            updateCounterDisplay(0);
+
+            // Add scroll tracking setup to support natural finger swiping on mobile devices
+            wrapper.onscroll = () => {
+                let index = Math.round(wrapper.scrollLeft / wrapper.clientWidth);
+                updateCounterDisplay(index);
+            };
         }
 
         function closeImage() {
             document.getElementById("imageModal").style.display = "none";
         }
 
-        // Toggle selection only when clicking the design info bar
+        function moveSlide(direction) {
+            const wrapper = document.getElementById("sliderWrapper");
+            let currentIndex = Math.round(wrapper.scrollLeft / wrapper.clientWidth);
+            let nextIndex = currentIndex + direction;
+
+            if (nextIndex >= 0 && nextIndex < activeImagesList.length) {
+                wrapper.scrollLeft = nextIndex * wrapper.clientWidth;
+                updateCounterDisplay(nextIndex);
+            }
+        }
+
+        function updateCounterDisplay(index) {
+            document.getElementById("slideCounter").innerText = `${index + 1} / ${activeImagesList.length}`;
+        }
+
+        // SELECTION MANAGEMENT
         function toggleSelection(designName, cardId) {
             const cardElement = document.getElementById(cardId);
+            const associatedImages = designCatalog[designName];
             
             if (selectedDesigns.has(designName)) {
                 selectedDesigns.delete(designName);
                 cardElement.classList.remove('selected');
             } else {
-                selectedDesigns.add(designName);
+                selectedDesigns.set(designName, associatedImages);
                 cardElement.classList.add('selected');
             }
             
@@ -369,12 +504,18 @@
                 
                 let message = `Hello JAIN EXPORTS, I would like to place a wholesale order for the following designs:\n\n`;
                 
-                const orderedItems = Array.from(selectedDesigns).sort();
-                orderedItems.forEach((item, index) => {
-                    message += `${index + 1}. Design: *${item}*\n`;
+                let index = 1;
+                selectedDesigns.forEach((urlsArray, designName) => {
+                    message += `${index}. Design Group: *${designName}*\n`;
+                    // Lists links for ALL sub-photos belonging to this item choice
+                    urlsArray.forEach((url, pIdx) => {
+                        message += `   • Photo ${pIdx + 1}: ${url}\n`;
+                    });
+                    message += `\n`;
+                    index++;
                 });
                 
-                message += `\nPlease let me know the estimated delivery and stock availability. Thanks!`;
+                message += `Please let me know the estimated delivery and stock availability. Thanks!`;
                 
                 wsLink.href = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
             } else {
